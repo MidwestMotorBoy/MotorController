@@ -1,0 +1,3 @@
+Current_Controller.cpp:9:9:int32_t Current_Controller::update(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t*, int32_t*)	24	static
+Current_Controller.cpp:12:9:int32_t update(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t*, int32_t*)	24	static
+Current_Controller.cpp:15:1:Current_Controller::Current_Controller(pi_settings, pi_settings, motor_parameters)	112	static

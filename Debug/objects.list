@@ -1,3 +1,4 @@
+"Core/Src/Current_Controller.o"
 "Core/Src/FOC.o"
 "Core/Src/PI_controller.o"
 "Core/Src/main.o"

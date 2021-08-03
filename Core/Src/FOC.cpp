@@ -31,10 +31,11 @@ int32_t sqrt1_2 = 707;
  *
  * returns:angle in milli mechanical degrees
  */
-int32_t rawdata_to_angle(int32_t rawdata)
+void rawdata_to_angle(int32_t rawdata,int32_t &mech_angle,int32_t &electrical_angle,int32_t debug_offset,int32_t pole_pairs)
 {
-	rawdata>>=4;
-return(rawdata*88);
+	int32_t mech_angle_temp = (879 * rawdata)/1000;
+	electrical_angle = ((((mech_angle_temp)*pole_pairs+debug_offset*10)%3600)%3600)/10;
+	mech_angle = mech_angle_temp/10;
 }
 //https://en.wikipedia.org/wiki/Direct-quadrature-zero_transformation basically ripped the math out of the implementation example
 //angle should be in degrees
@@ -53,12 +54,12 @@ return(rawdata*88);
  */
 void dqz(int32_t Ia,int32_t Ib,int32_t Ic,int32_t theta,int32_t *Iq,int32_t *Id )
 {
-	int32_t alpha = (2*Ia-Ib-Ic)/sqrt6;
-	int32_t beta = (Ib - Ic) * sqrt2;
+	int32_t alpha = (2*Ia-Ib-Ic)*sqrt1_6;
+	int32_t beta = (Ib - Ic) * sqrt1_2;
 	int32_t si = sin_lut_table[theta%360];
 	int32_t co = sin_lut_table[(theta+90)%360];
-	*Id = (co*alpha+si*beta)/100;
-	*Iq = (co*beta-si*alpha)/100;
+	*Id = (co*alpha+si*beta)/100000;
+	*Iq = (co*beta-si*alpha)/100000;
 }
 /*
  * Function:	inv_dqz

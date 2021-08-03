@@ -24,6 +24,7 @@
 /* USER CODE BEGIN Includes */
 #include "PI_controller.h"
 #include "FOC.h"
+#include <Current_Controller.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,6 +38,10 @@
 #define DUTY_CYCLE_MAX 6740
 #define POLE_PAIRS 5
 #define SPEED_SAMPLES 1000
+#define CURRENT_SAMPLES 40
+#define IQ_KI 100
+#define IQ_KP 4
+#define V_MAX 10
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -75,13 +80,20 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 int pwm_flag=0;
 //DEBUG GLOBAL VARS FOR CUBE MONITOR
-float debug_angle =0;
-float debug_DC_Bus =0;
-float debug_Current_A =0;
-float debug_Current_C =0;
-int32_t debug_offset = 0;
-uint32_t debug_vq=0;
+int32_t debug_angle =0;
+int32_t debug_DC_Bus =0;
+int32_t debug_Current_A =0;
+int32_t debug_Current_C =0;
+int32_t debug_offset = 140;
+int32_t debug_vq=0;
 int32_t debug_speed=0;
+int32_t debug_time_started;
+int32_t debug_time_ended;
+int32_t debug_waitstart;
+int32_t debug_IQ;
+int32_t debug_ID;
+int32_t debug_target_iq=0;
+int32_t debug_fake_angle=0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -123,6 +135,9 @@ int main(void)
 
   /* Enable I-Cache---------------------------------------------------------*/
   SCB_EnableICache();
+
+  /* Enable D-Cache---------------------------------------------------------*/
+  SCB_EnableDCache();
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -166,6 +181,7 @@ int main(void)
 	HAL_StatusTypeDef adcstart3_ret = HAL_ADC_Start(&hadc3);
 	HAL_TIM_Base_Start_IT(&htim3);
 	HAL_TIM_Base_Start_IT(&htim1);
+	HAL_TIM_Base_Start_IT(&htim4);
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
 	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
@@ -193,41 +209,56 @@ int main(void)
 		  Error_Handler();
 	  }
 	uint32_t adc_buff1 = 0, adc_buff3 = 0;
-	int32_t current_A = 0, current_C= 0;
+	int32_t current_A = 0,current_B = 0, current_C= 0;
 	uint32_t dc_bus = 0;
-	uint32_t speed_loop_counter= 0;
+	uint32_t speed_loop_counter= 0,current_loop_counter= 0;
 	int32_t speed_accumulator = 0;
 	int32_t last_angle=0;
-	int32_t Va=0,Vb=0,Vc=0,Vq=0,Vd=0;
+	int32_t Va=0,Vb=0,Vc=0,Vq=0,Vd=0,id,iq;
 	int32_t pwm_A=0,pwm_B=0,pwm_C=0;
-	adc_buff1 = HAL_ADC_GetValue(&hadc1);
-	adc_buff3 = HAL_ADC_GetValue(&hadc3);
 	//get intial angle
 	HAL_SPI_TransmitReceive(&hspi2, request_pos, position, 1, 100);
 	int32_t position_raw = (((uint16_t)position[1])<<8)+position[0];
 	int32_t position_temp = position_raw >> 4;
 	int32_t speed=0;
+	int32_t electrical_angle= 0;
+	int32_t iq_accumulator = 0;
+	int32_t id_accumulator = 0;
+	struct pi_settings iq_settings = {.ki=IQ_KI,.kp=IQ_KP,.min_intergrator=-V_MAX*100000/IQ_KI,.max_intergrator=V_MAX*100000/IQ_KI,.min_output=-V_MAX*100000,.max_output=V_MAX*100000,500000};
+	struct pi_settings id_settings = {.ki=IQ_KI,.kp=IQ_KP,.min_intergrator=-V_MAX*100000/IQ_KI,.max_intergrator=V_MAX*100000/IQ_KI,.min_output=-V_MAX*100000,.max_output=V_MAX*100000,500000};
+	struct motor_parameters motor = {.ld=62000,.lq=110000,.lambda_m=2722,.polepairs=5,.rs=2700};
 	last_angle = (879 * position_temp)/10000;
+	PI_controller Iq_PI_loop(IQ_KI, IQ_KP,-V_MAX*100000,V_MAX*100000);
+	HAL_Delay(4000);//wait 4s, helpful if test code is bad and need time to program before controller goes awal
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	while (1) {
+		int32_t debug_waittime = debug_time_started-debug_waitstart;
+		int32_t debug_time2run = debug_time_ended-debug_time_started;
+		TIM4->CNT=0;
+		debug_waitstart=TIM4->CNT;
 		while(pwm_flag==0){
-
 		}
+		debug_time_started = TIM4->CNT;
 		//Loop Chores
 		speed_loop_counter++;
+		current_loop_counter++;
 		pwm_flag=0;
 		//Get angle
-		HAL_SPI_TransmitReceive(&hspi2, request_pos, position, 1, 100);
 		int32_t position_raw = (((uint16_t)position[1])<<8)+position[0];
 		int32_t position_temp = position_raw >> 4;
-		mech_angle = (879 * position_temp)/10000;
-		int32_t electrical_angle = ((int32_t)mech_angle*POLE_PAIRS+debug_offset)%360;
+		rawdata_to_angle(position_temp,mech_angle,electrical_angle,debug_offset,POLE_PAIRS);
+//		debug_fake_angle = (debug_fake_angle+1)%36000;
+//		electrical_angle = debug_fake_angle/100;
 		//Get Currents
-		current_A = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter0, &channel5)*312500/262144;
-		current_C = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter1, &channel6)*312500/262144;
+		current_A = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter0, &channel5)*3125/2621;
+		current_C = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter1, &channel6)*3125/2621;
+		current_B=0-current_C-current_A;
+		dqz(current_A,current_B,current_C,electrical_angle,&iq,&id);
+		iq_accumulator+=iq;
+		id_accumulator+=id;
 		//Measure DC Bus
 		adc_buff3 = HAL_ADC_GetValue(&hadc3);
 		dc_bus = (374*adc_buff3)/10;
@@ -245,8 +276,19 @@ int main(void)
 			speed_accumulator=0;
 			speed_loop_counter=0;
 		}
+		if(current_loop_counter>=CURRENT_SAMPLES){
+			current_loop_counter=0;
+			Vq = Iq_PI_loop.update(debug_target_iq,iq,25*CURRENT_SAMPLES)/100;
+			//TODO: REMOVE WHEN DONE WITH DEBUG (global vars for cube monitor)
+			debug_IQ=iq_accumulator/CURRENT_SAMPLES;
+			iq_accumulator=0;
+			debug_ID=id_accumulator/CURRENT_SAMPLES;
+			id_accumulator=0;
+		}
 		//TODO enforce Vs max by reducing vq or at least consider it... could the vs/field weakening control loop just handle this?
 		//cal va,vb,vc
+
+		//FOC Control
 
 		inv_dqz(&Va,&Vb,&Vc,electrical_angle,Vq,Vd);
 		//Space Vector (set lowest voltage to zero)
@@ -271,13 +313,15 @@ int main(void)
 		TIM1->CCR1 = pwm_A;
 		TIM1->CCR2 = pwm_B;
 		TIM1->CCR3 = pwm_C;
+		HAL_SPI_TransmitReceive_IT(&hspi2, request_pos, position, 1);
 
-		//DEBUG (global vars for cube monitor)
+		//TODO: REMOVE WHEN DONE WITH DEBUG (global vars for cube monitor)
+		debug_time_ended = TIM4->CNT;
 		debug_angle =mech_angle;
 		debug_DC_Bus =dc_bus/1000.0;
-		debug_Current_A = current_A/1000.0;
-		debug_Current_C =current_C/1000.0;
-		Vq=debug_vq;
+		debug_Current_A = current_A;
+		debug_Current_C =current_C;
+		debug_vq=Vq;
 		debug_speed=speed;
 
     /* USER CODE END WHILE */
@@ -1007,7 +1051,7 @@ static void MX_TIM4_Init(void)
   htim4.Instance = TIM4;
   htim4.Init.Prescaler = 275;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 6875;
+  htim4.Init.Period = 9999;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)

@@ -1,4 +1,5 @@
-Core/Src/main.o: ../Core/Src/main.cpp ../Core/Inc/main.h \
+Core/Src/Current_Controller.o: ../Core/Src/Current_Controller.cpp \
+ ../Core/Inc/Current_Controller.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h \
  ../Core/Inc/stm32h7xx_hal_conf.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_rcc.h \
@@ -40,10 +41,9 @@ Core/Src/main.o: ../Core/Src/main.cpp ../Core/Inc/main.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_tim_ex.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h \
  ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h \
- ../Core/Inc/PI_controller.h ../Core/Inc/FOC.h \
- ../Core/Inc/Current_Controller.h ../Core/Inc/PI_controller.h
+ ../Core/Inc/PI_controller.h
 
-../Core/Inc/main.h:
+../Core/Inc/Current_Controller.h:
 
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal.h:
 
@@ -126,11 +126,5 @@ Core/Src/main.o: ../Core/Src/main.cpp ../Core/Inc/main.h \
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart.h:
 
 ../Drivers/STM32H7xx_HAL_Driver/Inc/stm32h7xx_hal_uart_ex.h:
-
-../Core/Inc/PI_controller.h:
-
-../Core/Inc/FOC.h:
-
-../Core/Inc/Current_Controller.h:
 
 ../Core/Inc/PI_controller.h:

@@ -13,6 +13,7 @@ C_SRCS += \
 ../Core/Src/system_stm32h7xx.c 
 
 CPP_SRCS += \
+../Core/Src/Current_Controller.cpp \
 ../Core/Src/FOC.cpp \
 ../Core/Src/PI_controller.cpp \
 ../Core/Src/main.cpp 
@@ -26,6 +27,7 @@ C_DEPS += \
 ./Core/Src/system_stm32h7xx.d 
 
 OBJS += \
+./Core/Src/Current_Controller.o \
 ./Core/Src/FOC.o \
 ./Core/Src/PI_controller.o \
 ./Core/Src/main.o \
@@ -37,12 +39,15 @@ OBJS += \
 ./Core/Src/system_stm32h7xx.o 
 
 CPP_DEPS += \
+./Core/Src/Current_Controller.d \
 ./Core/Src/FOC.d \
 ./Core/Src/PI_controller.d \
 ./Core/Src/main.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
+Core/Src/Current_Controller.o: ../Core/Src/Current_Controller.cpp Core/Src/subdir.mk
+	arm-none-eabi-g++ "$<" -mcpu=cortex-m7 -std=gnu++14 -g3 -DUSE_HAL_DRIVER -DSTM32H730xx -DDEBUG -c -I../Core/Inc -I../Drivers/STM32H7xx_HAL_Driver/Inc -I../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32H7xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti -fno-use-cxa-atexit -Wall -fstack-usage -MMD -MP -MF"Core/Src/Current_Controller.d" -MT"$@" --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -o "$@"
 Core/Src/FOC.o: ../Core/Src/FOC.cpp Core/Src/subdir.mk
 	arm-none-eabi-g++ "$<" -mcpu=cortex-m7 -std=gnu++14 -g3 -DUSE_HAL_DRIVER -DSTM32H730xx -DDEBUG -c -I../Core/Inc -I../Drivers/STM32H7xx_HAL_Driver/Inc -I../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32H7xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti -fno-use-cxa-atexit -Wall -fstack-usage -MMD -MP -MF"Core/Src/FOC.d" -MT"$@" --specs=nano.specs -mfpu=fpv5-d16 -mfloat-abi=hard -mthumb -o "$@"
 Core/Src/PI_controller.o: ../Core/Src/PI_controller.cpp Core/Src/subdir.mk

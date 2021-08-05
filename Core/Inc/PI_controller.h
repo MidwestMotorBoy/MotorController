@@ -10,20 +10,20 @@
 class PI_controller
 {
 private:
-    int32_t ki,kp;//stored at 1000x for precision
-    int32_t error_intergration;//stored at 1000x for precision
-	int32_t min_intergrator,max_intergrator;
-	int32_t min_output,max_output;
-	uint32_t slew;
+	float ki,kp;
+    float error_intergration;
+    float min_intergrator,max_intergrator;
+	float min_output,max_output;
+	float slew;
 public:
 	PI_controller();
-	PI_controller(int32_t _ki, int32_t _kp,int32_t _min_intergrator,int32_t _max_intergrator);
-	PI_controller(int32_t _ki, int32_t _kp,int32_t _min_intergrator,int32_t _max_intergrator,
-		int32_t _min_output,int32_t _max_output);
-	PI_controller(int32_t _ki, int32_t _kp,int32_t _min_intergrator,int32_t _max_intergrator,
-			int32_t _min_output,int32_t _max_output,int32_t _slew);
+	PI_controller(float _ki, float _kp,float _min_intergrator,float _max_intergrator);
+	PI_controller(float _ki, float _kp,float _min_intergrator,float _max_intergrator,
+			float _min_output,float _max_output);
+	PI_controller(float _ki, float _kp,float _min_intergrator,float _max_intergrator,
+			float _min_output,float _max_output,float _slew);
 	~PI_controller();
-	int32_t update(int32_t input,int32_t feedback,int32_t Ts);
+	float update(float input,float feedback,float Ts);
 };
 
 #endif

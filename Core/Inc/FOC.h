@@ -12,6 +12,6 @@
 
 
 void rawdata_to_angle(int32_t rawdata,int32_t &mech_angle,int32_t &electrical_angle,int32_t debug_offset,int32_t pole_pairs);
-void dqz(int32_t Ia,int32_t Ib,int32_t Ic,int32_t theta,int32_t *Iq,int32_t *Id );
-void inv_dqz(int32_t *Va,int32_t *Vb,int32_t *Vc,int32_t theta,int32_t Vq,int32_t Vd );
+void dqz(float Ia,float Ib,float Ic,int32_t theta,float &Iq,float &Id );
+void inv_dqz(float &Va,float &Vb,float &Vc,int32_t theta,float Vq,float Vd );
 #endif /* FOC_H_ */

@@ -10,20 +10,20 @@
 #define INC_CURRENT_CONTROLLER_H_
 //made just to centralize pi loop settings for readability
 struct pi_settings{
-	int32_t ki;
-	int32_t kp;
-	int32_t min_intergrator;
-	int32_t max_intergrator;
-	int32_t min_output;
-	int32_t max_output;
-	int32_t slew;
+	float ki;
+	float kp;
+	float min_intergrator;
+	float max_intergrator;
+	float min_output;
+	float max_output;
+	float slew;
 };
 struct motor_parameters{
-	int32_t ld;//nH
-	int32_t lq;//nH
-	int32_t lambda_m;//mWb
-	int32_t polepairs;
-	int32_t rs;//µΩ
+	float ld;
+	float lq;
+	float lambda_m;
+	float polepairs;
+	float rs;
 };
 class Current_Controller
 {
@@ -32,7 +32,8 @@ private:
 	PI_controller id_PI,iq_PI;//stored at 1000x for precision
 public:
 	Current_Controller(pi_settings iq_settigns, pi_settings id_settigns,motor_parameters _motor_parameters);
-	int32_t update(int32_t iq_target, int32_t iq_act, int32_t id_target,int32_t id_act,int32_t speed_mech,int32_t Ts, int32_t *vq, int32_t *vd);
+	~Current_Controller();
+	void update_vqvd(float iq_target, float iq_act, float id_target,float id_act,float speed_mech,float Ts, float &vq, float &vd);
 };
 
 

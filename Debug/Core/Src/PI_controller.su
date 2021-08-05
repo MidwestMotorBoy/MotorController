@@ -1,6 +1,6 @@
 PI_controller.cpp:18:1:PI_controller::PI_controller()	16	static
-PI_controller.cpp:28:1:PI_controller::PI_controller(int32_t, int32_t, int32_t, int32_t)	24	static
-PI_controller.cpp:38:1:PI_controller::PI_controller(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t)	24	static
-PI_controller.cpp:49:1:PI_controller::PI_controller(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t)	24	static
+PI_controller.cpp:28:1:PI_controller::PI_controller(float, float, float, float)	32	static
+PI_controller.cpp:38:1:PI_controller::PI_controller(float, float, float, float, float, float)	40	static
+PI_controller.cpp:49:1:PI_controller::PI_controller(float, float, float, float, float, float, float)	40	static
 PI_controller.cpp:60:1:PI_controller::~PI_controller()	16	static
-PI_controller.cpp:74:9:int32_t PI_controller::update(int32_t, int32_t, int32_t)	32	static
+PI_controller.cpp:74:7:float PI_controller::update(float, float, float)	32	static

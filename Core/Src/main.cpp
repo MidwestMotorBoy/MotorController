@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "PI_controller.h"
+//#include "PI_controller.h"
 #include "FOC.h"
 #include <Current_Controller.h>
 /* USER CODE END Includes */
@@ -37,11 +37,16 @@
 #define TIMER_PERIOD 6876
 #define DUTY_CYCLE_MAX 6740
 #define POLE_PAIRS 5
-#define SPEED_SAMPLES 1000
-#define CURRENT_SAMPLES 40
-#define IQ_KI 100
-#define IQ_KP 4
+#define SPEED_SAMPLES 2000
+#define CURRENT_SAMPLES 20
+#define IQ_KI 0.22f
+#define IQ_KP 0.05f
+#define SPEED_KI 0.02f
+#define SPEED_KP 0.5f
+#define IQ_MAX 10
 #define V_MAX 10
+#define TS 25e-6
+#define RPM_COEF 1/(SPEED_SAMPLES*TS*60)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -81,19 +86,25 @@ UART_HandleTypeDef huart2;
 int pwm_flag=0;
 //DEBUG GLOBAL VARS FOR CUBE MONITOR
 int32_t debug_angle =0;
-int32_t debug_DC_Bus =0;
-int32_t debug_Current_A =0;
-int32_t debug_Current_C =0;
+float debug_DC_Bus =0;
+float debug_Current_A =0;
+float debug_Current_C =0;
 int32_t debug_offset = 140;
-int32_t debug_vq=0;
+float debug_vq=0;
+float debug_vd=0;
+float debug_va=0;
+float debug_vb=0;
+float debug_vc=0;
 int32_t debug_speed=0;
 int32_t debug_time_started;
 int32_t debug_time_ended;
 int32_t debug_waitstart;
-int32_t debug_IQ;
-int32_t debug_ID;
-int32_t debug_target_iq=0;
+float debug_IQ;
+float debug_ID;
+float debug_target_iq=0;
+float debug_target_speed=0;
 int32_t debug_fake_angle=0;
+int32_t debug_worst_t=0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -209,27 +220,30 @@ int main(void)
 		  Error_Handler();
 	  }
 	uint32_t adc_buff1 = 0, adc_buff3 = 0;
-	int32_t current_A = 0,current_B = 0, current_C= 0;
-	uint32_t dc_bus = 0;
+	float current_A = 0,current_B = 0, current_C= 0;
+	float dc_bus = 0;
 	uint32_t speed_loop_counter= 0,current_loop_counter= 0;
 	int32_t speed_accumulator = 0;
 	int32_t last_angle=0;
-	int32_t Va=0,Vb=0,Vc=0,Vq=0,Vd=0,id,iq;
+	float Va=0,Vb=0,Vc=0,Vq=0,Vd=0,id,iq;
 	int32_t pwm_A=0,pwm_B=0,pwm_C=0;
 	//get intial angle
 	HAL_SPI_TransmitReceive(&hspi2, request_pos, position, 1, 100);
 	int32_t position_raw = (((uint16_t)position[1])<<8)+position[0];
 	int32_t position_temp = position_raw >> 4;
-	int32_t speed=0;
-	int32_t electrical_angle= 0;
-	int32_t iq_accumulator = 0;
-	int32_t id_accumulator = 0;
-	struct pi_settings iq_settings = {.ki=IQ_KI,.kp=IQ_KP,.min_intergrator=-V_MAX*100000/IQ_KI,.max_intergrator=V_MAX*100000/IQ_KI,.min_output=-V_MAX*100000,.max_output=V_MAX*100000,500000};
-	struct pi_settings id_settings = {.ki=IQ_KI,.kp=IQ_KP,.min_intergrator=-V_MAX*100000/IQ_KI,.max_intergrator=V_MAX*100000/IQ_KI,.min_output=-V_MAX*100000,.max_output=V_MAX*100000,500000};
-	struct motor_parameters motor = {.ld=62000,.lq=110000,.lambda_m=2722,.polepairs=5,.rs=2700};
+	float speed=0;
+	int32_t electrical_angle= 0,electrical_angle_past= 0;
+	float iq_accumulator = 0;
+	float id_accumulator = 0;
+	struct pi_settings iq_settings = {.ki=IQ_KI,.kp=IQ_KP,.min_intergrator=-V_MAX/IQ_KI,.max_intergrator=V_MAX/IQ_KI,.min_output=-V_MAX,.max_output=V_MAX,5000};
+	struct pi_settings id_settings = {.ki=IQ_KI,.kp=IQ_KP,.min_intergrator=-V_MAX/IQ_KI,.max_intergrator=V_MAX/IQ_KI,.min_output=-V_MAX,.max_output=V_MAX,5000};
+//	struct motor_parameters motor = {.ld=62e-6,.lq=110e-6,.lambda_m=3e-3,.polepairs=POLE_PAIRS,.rs=27e-3};
+	struct motor_parameters motor = {.ld=0e-6,.lq=0e-6,.lambda_m=0e-3,.polepairs=POLE_PAIRS,.rs=0e-3};
+	Current_Controller idiq_controller(iq_settings, id_settings, motor);
 	last_angle = (879 * position_temp)/10000;
-	PI_controller Iq_PI_loop(IQ_KI, IQ_KP,-V_MAX*100000,V_MAX*100000);
-	HAL_Delay(4000);//wait 4s, helpful if test code is bad and need time to program before controller goes awal
+	PI_controller speed_controller(SPEED_KI, SPEED_KP,-IQ_MAX,IQ_MAX);
+//	PI_controller Iq_PI_loop(IQ_KI, IQ_KP,-V_MAX*100000,V_MAX*100000);
+	HAL_Delay(500);//wait 4s, helpful if test code is bad and need time to program before controller goes awal
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -237,6 +251,9 @@ int main(void)
 	while (1) {
 		int32_t debug_waittime = debug_time_started-debug_waitstart;
 		int32_t debug_time2run = debug_time_ended-debug_time_started;
+		if(debug_worst_t<debug_time2run){
+			debug_worst_t = debug_time2run;
+		}
 		TIM4->CNT=0;
 		debug_waitstart=TIM4->CNT;
 		while(pwm_flag==0){
@@ -253,15 +270,16 @@ int main(void)
 //		debug_fake_angle = (debug_fake_angle+1)%36000;
 //		electrical_angle = debug_fake_angle/100;
 		//Get Currents
-		current_A = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter0, &channel5)*3125/2621;
-		current_C = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter1, &channel6)*3125/2621;
+		current_A = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter0, &channel5)*0.0012;
+		current_C = HAL_DFSDM_FilterGetRegularValue(&hdfsdm1_filter1, &channel6)*0.0012;
 		current_B=0-current_C-current_A;
-		dqz(current_A,current_B,current_C,electrical_angle,&iq,&id);
+		dqz(current_A,current_B,current_C,electrical_angle,iq,id);
+//		electrical_angle_past=electrical_angle;
 		iq_accumulator+=iq;
 		id_accumulator+=id;
 		//Measure DC Bus
 		adc_buff3 = HAL_ADC_GetValue(&hadc3);
-		dc_bus = (374*adc_buff3)/10;
+		dc_bus = (.0374*adc_buff3);
 		//Update speed accumulator
 		int32_t diff_angle = mech_angle-last_angle;
 		if(diff_angle<-180){
@@ -272,17 +290,21 @@ int main(void)
 		speed_accumulator+=diff_angle;
 		last_angle=mech_angle;
 		if(speed_loop_counter>=SPEED_SAMPLES){
-			speed=(speed_accumulator*6666)/1000;
+			speed=speed_accumulator*RPM_COEF;
 			speed_accumulator=0;
 			speed_loop_counter=0;
+			debug_target_iq=-1*speed_controller.update(debug_target_speed,speed,TS*SPEED_SAMPLES);
 		}
 		if(current_loop_counter>=CURRENT_SAMPLES){
 			current_loop_counter=0;
-			Vq = Iq_PI_loop.update(debug_target_iq,iq,25*CURRENT_SAMPLES)/100;
-			//TODO: REMOVE WHEN DONE WITH DEBUG (global vars for cube monitor)
-			debug_IQ=iq_accumulator/CURRENT_SAMPLES;
-			iq_accumulator=0;
 			debug_ID=id_accumulator/CURRENT_SAMPLES;
+			debug_IQ=iq_accumulator/CURRENT_SAMPLES;
+//			Vq = Iq_PI_loop.update(debug_target_iq,iq,25*CURRENT_SAMPLES)/100;
+			idiq_controller.update_vqvd(debug_target_iq, debug_IQ, 0.0f,debug_ID,speed,TS*CURRENT_SAMPLES, Vq, Vd);
+//			Vd=0;
+//			Vd=-Vd;
+			//TODO: REMOVE WHEN DONE WITH DEBUG (global vars for cube monitor)
+			iq_accumulator=0;
 			id_accumulator=0;
 		}
 		//TODO enforce Vs max by reducing vq or at least consider it... could the vs/field weakening control loop just handle this?
@@ -290,7 +312,7 @@ int main(void)
 
 		//FOC Control
 
-		inv_dqz(&Va,&Vb,&Vc,electrical_angle,Vq,Vd);
+		inv_dqz(Va,Vb,Vc,electrical_angle,Vq,Vd);
 		//Space Vector (set lowest voltage to zero)
 		if(Va<=Vb && Va<=Vc){
 			Vb-=Va;
@@ -317,13 +339,16 @@ int main(void)
 
 		//TODO: REMOVE WHEN DONE WITH DEBUG (global vars for cube monitor)
 		debug_time_ended = TIM4->CNT;
-		debug_angle =mech_angle;
+		debug_angle =electrical_angle;
 		debug_DC_Bus =dc_bus/1000.0;
 		debug_Current_A = current_A;
 		debug_Current_C =current_C;
 		debug_vq=Vq;
+		debug_vd=Vd;
 		debug_speed=speed;
-
+		debug_va=Va;
+		debug_vb=Vb;
+		debug_vc=Vc;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

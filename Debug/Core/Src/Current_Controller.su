@@ -1,3 +1,2 @@
-Current_Controller.cpp:9:9:int32_t Current_Controller::update(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t*, int32_t*)	24	static
-Current_Controller.cpp:12:9:int32_t update(int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t*, int32_t*)	24	static
-Current_Controller.cpp:15:1:Current_Controller::Current_Controller(pi_settings, pi_settings, motor_parameters)	112	static
+Current_Controller.cpp:19:6:void Current_Controller::update_vqvd(float, float, float, float, float, float, float&, float&)	72	static
+Current_Controller.cpp:28:1:Current_Controller::Current_Controller(pi_settings, pi_settings, motor_parameters)	88	static

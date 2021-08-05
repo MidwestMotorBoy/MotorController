@@ -25,7 +25,7 @@ PI_controller::PI_controller(){
 	error_intergration=0;
 	slew=999999;
 }
-PI_controller::PI_controller(int32_t _ki, int32_t _kp,int32_t _min_output,int32_t _max_output){
+PI_controller::PI_controller(float _ki, float _kp,float _min_output,float _max_output){
 	ki = _ki;
 	kp = _kp;
 	min_intergrator = _min_output/_ki;
@@ -35,8 +35,8 @@ PI_controller::PI_controller(int32_t _ki, int32_t _kp,int32_t _min_output,int32_
 	error_intergration=0;
 	slew=999999;
 }
-PI_controller::PI_controller(int32_t _ki, int32_t _kp,int32_t _min_intergrator,int32_t _max_intergrator,
-		int32_t _min_output,int32_t _max_output){
+PI_controller::PI_controller(float _ki, float _kp,float _min_intergrator,float _max_intergrator,
+		float _min_output,float _max_output){
 	ki = _ki;
 	kp = _kp;
 	min_intergrator = _min_intergrator;
@@ -46,8 +46,8 @@ PI_controller::PI_controller(int32_t _ki, int32_t _kp,int32_t _min_intergrator,i
 	error_intergration=0;
 	slew=999999;
 }
-PI_controller::PI_controller(int32_t _ki, int32_t _kp,int32_t _min_intergrator,int32_t _max_intergrator,
-		int32_t _min_output,int32_t _max_output,int32_t _slew){
+PI_controller::PI_controller(float _ki, float _kp,float _min_intergrator,float _max_intergrator,
+		float _min_output,float _max_output,float _slew){
 	ki = _ki;
 	kp = _kp;
 	min_intergrator = _min_intergrator;
@@ -71,16 +71,16 @@ PI_controller::~PI_controller(){
  *
  * returns:nothing
  */
-int32_t PI_controller::update(int32_t input,int32_t feedback,int32_t ts){
-		int32_t error=input-feedback;
-		error_intergration+=error*ts/1000;
-		if(min_intergrator > error_intergration/1000){
-			error_intergration=min_intergrator*1000;
+float PI_controller::update(float input,float feedback,float ts){
+		float error=input-feedback;
+		error_intergration=error_intergration+error*ts;
+		if(min_intergrator > error_intergration){
+			error_intergration=min_intergrator;
 		}
-		if(max_intergrator < error_intergration/1000){
-			error_intergration=max_intergrator*1000;
+		if(max_intergrator < error_intergration){
+			error_intergration=max_intergrator;
 		}
-		int32_t output = ki*error_intergration/1000+error*kp;
+		float output = ki*error_intergration+error*kp;
 		if(min_output > output){
 			output = min_output;
 		}
@@ -89,8 +89,8 @@ int32_t PI_controller::update(int32_t input,int32_t feedback,int32_t ts){
 		}
 		return(output);
 }
-//int32_t PI_controller::update(int32_t input,int32_t feedback,int32_t ts){
-//		int32_t error=input-feedback;
+//float PI_controller::update(float input,float feedback,float ts){
+//		float error=input-feedback;
 //		this->error_intergration+=error*ts/1000;
 //		if(this->min_intergrator > this->error_intergration/1000){
 //			this->error_intergration=this->min_intergrator*1000;
@@ -98,7 +98,7 @@ int32_t PI_controller::update(int32_t input,int32_t feedback,int32_t ts){
 //		if(this->max_intergrator < this->error_intergration/1000){
 //			this->error_intergration=this->max_intergrator*1000;
 //		}
-//		int32_t output = this->ki*this->error_intergration/1000+error*this->kp;
+//		float output = this->ki*this->error_intergration/1000+error*this->kp;
 //		if(this->min_output > output){
 //			output = this->min_output;
 //		}

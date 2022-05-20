@@ -57,11 +57,10 @@ float sqrt1_2 = 0.707f;
  *
  * returns:angle in milli mechanical degrees
  */
-void rawdata_to_angle(int32_t rawdata,int32_t &mech_angle,int32_t &electrical_angle,int32_t debug_offset,int32_t pole_pairs)
+void rawdata_to_angle(int32_t rawdata,float &mech_angle,int32_t &electrical_angle,int32_t debug_offset,int32_t pole_pairs)
 {
-	float mech_angle_temp = rawdata*0.087890625000000f;
-	electrical_angle = ((int32_t)(mech_angle_temp*pole_pairs+debug_offset))%360;
-	mech_angle = mech_angle_temp;
+	mech_angle = 360-rawdata*0.087890625000000f;
+	electrical_angle = ((int32_t)(mech_angle*pole_pairs+debug_offset))%360;
 }
 //https://en.wikipedia.org/wiki/Direct-quadrature-zero_transformation basically ripped the math out of the implementation example
 //angle should be in degrees

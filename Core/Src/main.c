@@ -38,15 +38,16 @@
 #define DUTY_CYCLE_MAX 6740
 #define POLE_PAIRS 5
 #define SPEED_SAMPLES 2000
-#define CURRENT_SAMPLES 20
-#define IQ_KI 0.22f
-#define IQ_KP 0.05f
-#define SPEED_KI 0.02f
-#define SPEED_KP 0.5f
-#define IQ_MAX 10
+#define POS_SAMPLES 1
+#define CURRENT_SAMPLES 25
+#define IQ_KI 0.25f
+#define IQ_KP 0.03f
+#define SPEED_KI 0.05f
+#define SPEED_KP 0.75f
+#define IQ_MAX 30
 #define V_MAX 10
-#define TS 25e-6
-#define RPM_COEF 1/(SPEED_SAMPLES*TS*60)
+#define TS 25.0e-6
+#define MIN_ANGLE_CHANGE 3
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -83,26 +84,27 @@ UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+float rpm_coeff = 1.0/(SPEED_SAMPLES*TS*6);
 int pwm_flag=0;
+uint32_t speed_loop_counter= 0,current_loop_counter= 0,position_loop_counter= 0;
 //DEBUG GLOBAL VARS FOR CUBE MONITOR
-int32_t debug_angle =0;
+int32_t debug_angle_elec =0;
+int32_t debug_angle_mech =0;
 float debug_DC_Bus =0;
 float debug_Current_A =0;
 float debug_Current_C =0;
 int32_t debug_offset = 140;
-float debug_vq=0;
-float debug_vd=0;
-float debug_va=0;
-float debug_vb=0;
-float debug_vc=0;
-int32_t debug_speed=0;
+float debug_vq=0,debug_vd=0;
+float debug_va=0,debug_vb=0,debug_vc=0;
+float debug_ia=0,debug_ib=0,debug_ic=0;
+float debug_speed=0;
 int32_t debug_time_started;
 int32_t debug_time_ended;
 int32_t debug_waitstart;
 float debug_IQ;
 float debug_ID;
 float debug_target_iq=0;
-float debug_target_speed=0;
+volatile float debug_target_speed=0;
 int32_t debug_fake_angle=0;
 int32_t debug_worst_t=0;
 /* USER CODE END PV */
@@ -188,8 +190,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
 //  	HAL_ADC_MspInit(&hadc3);
   	HAL_ADCEx_Calibration_Start(&hadc3, ADC_CALIB_OFFSET, ADC_SINGLE_ENDED);
-	HAL_StatusTypeDef adcstart2_ret = HAL_ADC_Start(&hadc2);
-	HAL_StatusTypeDef adcstart3_ret = HAL_ADC_Start(&hadc3);
+	HAL_ADC_Start(&hadc2);
+	HAL_ADC_Start(&hadc3);
 	HAL_TIM_Base_Start_IT(&htim3);
 	HAL_TIM_Base_Start_IT(&htim1);
 	HAL_TIM_Base_Start_IT(&htim4);
@@ -201,17 +203,22 @@ int main(void)
 	HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
 	HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
 	TIM1->CCER = 0b0000010101010101;
+//	TIM1->CCER = 0b0000000000000000;
 	TIM1->CCR1 = 0;
 	TIM1->CCR2 = 0;
 	TIM1->CCR3 = 0;
 	TIM1->CCR4 = 4998;
-	uint32_t channel1 = 0;
+//	uint32_t channel1 = 0;
 	uint32_t channel5 = 0;
 	uint32_t channel6 = 0;
-	uint8_t request_pos[2] = {0xff};
-	float data2angle = 360.0 / 4096;
+	int32_t position_temp=0;
+	uint8_t request_pos[2] = {0x00};
+//	float data2angle = 360.0 / 4096;
 	uint8_t position[2]={0};
-	int32_t mech_angle=0;
+	float mech_angle=0,last_angle=0;
+	int32_t electrical_angle= 0;
+//	int32_t electrical_angle_past= 0;
+	float speed_accumulator = 0;
 	if(HAL_DFSDM_FilterRegularStart(&hdfsdm1_filter0) != HAL_OK){
 		  Error_Handler();
 	  }
@@ -219,20 +226,16 @@ int main(void)
 	if(HAL_DFSDM_FilterRegularStart(&hdfsdm1_filter1) != HAL_OK){
 		  Error_Handler();
 	  }
-	uint32_t adc_buff1 = 0, adc_buff3 = 0;
+	uint32_t adc_buff3 = 0;
 	float current_A = 0,current_B = 0, current_C= 0;
-	float dc_bus = 0;
-	uint32_t speed_loop_counter= 0,current_loop_counter= 0;
-	int32_t speed_accumulator = 0;
-	int32_t last_angle=0;
+	float dc_bus = 0,dc_bus_inv=1;
 	float Va=0,Vb=0,Vc=0,Vq=0,Vd=0,id,iq;
 	int32_t pwm_A=0,pwm_B=0,pwm_C=0;
 	//get intial angle
 	HAL_SPI_TransmitReceive(&hspi2, request_pos, position, 1, 100);
 	int32_t position_raw = (((uint16_t)position[1])<<8)+position[0];
-	int32_t position_temp = position_raw >> 4;
+	position_temp = position_raw >> 4;
 	float speed=0;
-	int32_t electrical_angle= 0,electrical_angle_past= 0;
 	float iq_accumulator = 0;
 	float id_accumulator = 0;
 	struct pi_settings iq_settings = {.ki=IQ_KI,.kp=IQ_KP,.min_intergrator=-V_MAX/IQ_KI,.max_intergrator=V_MAX/IQ_KI,.min_output=-V_MAX,.max_output=V_MAX,5000};
@@ -240,16 +243,23 @@ int main(void)
 //	struct motor_parameters motor = {.ld=62e-6,.lq=110e-6,.lambda_m=3e-3,.polepairs=POLE_PAIRS,.rs=27e-3};
 	struct motor_parameters motor = {.ld=0e-6,.lq=0e-6,.lambda_m=0e-3,.polepairs=POLE_PAIRS,.rs=0e-3};
 	Current_Controller idiq_controller(iq_settings, id_settings, motor);
-	last_angle = (879 * position_temp)/10000;
-	PI_controller speed_controller(SPEED_KI, SPEED_KP,-IQ_MAX,IQ_MAX);
+	rawdata_to_angle(position_temp,mech_angle,electrical_angle,debug_offset,POLE_PAIRS);
+	last_angle = mech_angle;
+	PI_controller speed_controller(SPEED_KI, SPEED_KP,-IQ_MAX,IQ_MAX,100);
 //	PI_controller Iq_PI_loop(IQ_KI, IQ_KP,-V_MAX*100000,V_MAX*100000);
-	HAL_Delay(500);//wait 4s, helpful if test code is bad and need time to program before controller goes awal
+	HAL_Delay(100);
+	while(debug_target_speed==0){
+		//wait 4s, helpful if test code is bad and need time to program before controller goes awal
+	}
+	adc_buff3 = HAL_ADC_GetValue(&hadc3);
+	dc_bus = (.0374*adc_buff3);
+	dc_bus_inv = 1/dc_bus;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	while (1) {
-		int32_t debug_waittime = debug_time_started-debug_waitstart;
+//		int32_t debug_waittime = debug_time_started-debug_waitstart;
 		int32_t debug_time2run = debug_time_ended-debug_time_started;
 		if(debug_worst_t<debug_time2run){
 			debug_worst_t = debug_time2run;
@@ -262,10 +272,11 @@ int main(void)
 		//Loop Chores
 		speed_loop_counter++;
 		current_loop_counter++;
+		position_loop_counter++;
 		pwm_flag=0;
 		//Get angle
 		int32_t position_raw = (((uint16_t)position[1])<<8)+position[0];
-		int32_t position_temp = position_raw >> 4;
+		position_temp = position_raw >> 4;
 		rawdata_to_angle(position_temp,mech_angle,electrical_angle,debug_offset,POLE_PAIRS);
 //		debug_fake_angle = (debug_fake_angle+1)%36000;
 //		electrical_angle = debug_fake_angle/100;
@@ -277,11 +288,8 @@ int main(void)
 //		electrical_angle_past=electrical_angle;
 		iq_accumulator+=iq;
 		id_accumulator+=id;
-		//Measure DC Bus
-		adc_buff3 = HAL_ADC_GetValue(&hadc3);
-		dc_bus = (.0374*adc_buff3);
 		//Update speed accumulator
-		int32_t diff_angle = mech_angle-last_angle;
+		float diff_angle = mech_angle-last_angle;
 		if(diff_angle<-180){
 			diff_angle=360+diff_angle;
 		}else if(diff_angle>180){
@@ -290,12 +298,21 @@ int main(void)
 		speed_accumulator+=diff_angle;
 		last_angle=mech_angle;
 		if(speed_loop_counter>=SPEED_SAMPLES){
-			speed=speed_accumulator*RPM_COEF;
+			//Measure DC Bus
+			adc_buff3 = HAL_ADC_GetValue(&hadc3);
+			dc_bus = (.0374*adc_buff3);
+			dc_bus_inv = 1/dc_bus;
+			if(speed_accumulator<MIN_ANGLE_CHANGE && (speed_accumulator*-1)<MIN_ANGLE_CHANGE){
+				speed_accumulator=0;
+			}
+			speed=speed_accumulator*rpm_coeff;
 			speed_accumulator=0;
 			speed_loop_counter=0;
-			debug_target_iq=-1*speed_controller.update(debug_target_speed,speed,TS*SPEED_SAMPLES);
+			debug_target_iq=speed_controller.update(debug_target_speed,speed,TS*SPEED_SAMPLES);
 		}
 		if(current_loop_counter>=CURRENT_SAMPLES){
+//			position_temp+=2;
+//			position_temp=position_temp%4096;
 			current_loop_counter=0;
 			debug_ID=id_accumulator/CURRENT_SAMPLES;
 			debug_IQ=iq_accumulator/CURRENT_SAMPLES;
@@ -328,27 +345,38 @@ int main(void)
 			Vc=0;
 		}
 		//convert voltage to PWM
-		pwm_A = (TIMER_PERIOD*Va)/dc_bus;
-		pwm_B = (TIMER_PERIOD*Vb)/dc_bus;
-		pwm_C = (TIMER_PERIOD*Vc)/dc_bus;
+
+		pwm_A = (TIMER_PERIOD*Va*dc_bus_inv);
+		pwm_B = (TIMER_PERIOD*Vb*dc_bus_inv);
+		pwm_C = (TIMER_PERIOD*Vc*dc_bus_inv);
 		//Write PWM to timer shadow registers
 		TIM1->CCR1 = pwm_A;
 		TIM1->CCR2 = pwm_B;
 		TIM1->CCR3 = pwm_C;
-		HAL_SPI_TransmitReceive_IT(&hspi2, request_pos, position, 1);
+//		TIM1->CCR1 = 1000;
+//		TIM1->CCR2 = 1000;
+//		TIM1->CCR3 = 1000;
+		if(position_loop_counter>POS_SAMPLES){
+			position_loop_counter=0;
+			HAL_SPI_TransmitReceive_IT(&hspi2, request_pos, position, 1);
+		}
 
 		//TODO: REMOVE WHEN DONE WITH DEBUG (global vars for cube monitor)
 		debug_time_ended = TIM4->CNT;
-		debug_angle =electrical_angle;
-		debug_DC_Bus =dc_bus/1000.0;
+		debug_angle_elec = electrical_angle;
+		debug_angle_mech = mech_angle;
+		debug_DC_Bus =dc_bus;
 		debug_Current_A = current_A;
-		debug_Current_C =current_C;
+		debug_Current_C = current_C;
 		debug_vq=Vq;
 		debug_vd=Vd;
 		debug_speed=speed;
 		debug_va=Va;
 		debug_vb=Vb;
 		debug_vc=Vc;
+		debug_ia=current_A*10;
+		debug_ib=current_B*10;
+		debug_ic=current_C*10;
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -900,10 +928,10 @@ static void MX_SPI2_Init(void)
   hspi2.Init.Mode = SPI_MODE_MASTER;
   hspi2.Init.Direction = SPI_DIRECTION_2LINES;
   hspi2.Init.DataSize = SPI_DATASIZE_16BIT;
-  hspi2.Init.CLKPolarity = SPI_POLARITY_HIGH;
-  hspi2.Init.CLKPhase = SPI_PHASE_2EDGE;
+  hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi2.Init.NSS = SPI_NSS_HARD_OUTPUT;
-  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
   hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -916,7 +944,7 @@ static void MX_SPI2_Init(void)
   hspi2.Init.MasterSSIdleness = SPI_MASTER_SS_IDLENESS_00CYCLE;
   hspi2.Init.MasterInterDataIdleness = SPI_MASTER_INTERDATA_IDLENESS_00CYCLE;
   hspi2.Init.MasterReceiverAutoSusp = SPI_MASTER_RX_AUTOSUSP_DISABLE;
-  hspi2.Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_DISABLE;
+  hspi2.Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_ENABLE;
   hspi2.Init.IOSwap = SPI_IO_SWAP_DISABLE;
   if (HAL_SPI_Init(&hspi2) != HAL_OK)
   {
@@ -991,7 +1019,7 @@ static void MX_TIM1_Init(void)
   sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
   sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-  sBreakDeadTimeConfig.DeadTime = 10;
+  sBreakDeadTimeConfig.DeadTime = 100;
   sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
   sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
   sBreakDeadTimeConfig.BreakFilter = 0;

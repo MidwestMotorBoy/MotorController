@@ -23,6 +23,7 @@ PI_controller::PI_controller(){
 	min_output = 0;
 	max_output = 0;
 	error_intergration=0;
+	old_ref=0;
 	slew=999999;
 }
 PI_controller::PI_controller(float _ki, float _kp,float _min_output,float _max_output){
@@ -33,7 +34,19 @@ PI_controller::PI_controller(float _ki, float _kp,float _min_output,float _max_o
 	min_output = _min_output;
 	max_output = _max_output;
 	error_intergration=0;
+	old_ref=0;
 	slew=999999;
+}
+PI_controller::PI_controller(float _ki, float _kp,float _min_output,float _max_output,float _slew){
+	ki = _ki;
+	kp = _kp;
+	min_intergrator = _min_output/_ki;
+	max_intergrator = _max_output/_ki;
+	min_output = _min_output;
+	max_output = _max_output;
+	error_intergration=0;
+	old_ref=0;
+	slew=_slew;
 }
 PI_controller::PI_controller(float _ki, float _kp,float _min_intergrator,float _max_intergrator,
 		float _min_output,float _max_output){
@@ -44,6 +57,7 @@ PI_controller::PI_controller(float _ki, float _kp,float _min_intergrator,float _
 	min_output = _min_output;
 	max_output = _max_output;
 	error_intergration=0;
+	old_ref=0;
 	slew=999999;
 }
 PI_controller::PI_controller(float _ki, float _kp,float _min_intergrator,float _max_intergrator,
@@ -55,6 +69,7 @@ PI_controller::PI_controller(float _ki, float _kp,float _min_intergrator,float _
 	min_output = _min_output;
 	max_output = _max_output;
 	error_intergration=0;
+	old_ref=0;
 	slew=_slew;
 }
 PI_controller::~PI_controller(){
@@ -71,8 +86,17 @@ PI_controller::~PI_controller(){
  *
  * returns:nothing
  */
-float PI_controller::update(float input,float feedback,float ts){
-		float error=input-feedback;
+float PI_controller::update(float ref,float feedback,float ts){
+		float change_in_ref = ref-old_ref;
+		float max_change = slew*ts;
+		if(change_in_ref>max_change){
+			ref = old_ref+max_change;
+		}
+		else if(change_in_ref<-max_change){
+			ref = old_ref-max_change;
+		}
+		old_ref=ref;
+		float error=ref-feedback;
 		error_intergration=error_intergration+error*ts;
 		if(min_intergrator > error_intergration){
 			error_intergration=min_intergrator;

@@ -15,9 +15,11 @@ private:
     float min_intergrator,max_intergrator;
 	float min_output,max_output;
 	float slew;
+	float old_ref;
 public:
 	PI_controller();
 	PI_controller(float _ki, float _kp,float _min_intergrator,float _max_intergrator);
+	PI_controller(float _ki, float _kp,float _min_output,float _max_output,float _slew);
 	PI_controller(float _ki, float _kp,float _min_intergrator,float _max_intergrator,
 			float _min_output,float _max_output);
 	PI_controller(float _ki, float _kp,float _min_intergrator,float _max_intergrator,
